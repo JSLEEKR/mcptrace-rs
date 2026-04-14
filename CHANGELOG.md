@@ -44,6 +44,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- **Removed unused `time` crate dependency**: `time = "0.3"` was
+  declared in `Cargo.toml` but never imported by any source file.
+  It pulled `time v0.3.47` plus its transitive deps into `Cargo.lock`
+  for nothing — wasted compile time, larger attack surface, more
+  audit work for downstream consumers. `cargo tree -i time` now
+  reports no such package; all 199 tests still pass on the trimmed
+  dependency graph.
 - **JSON-RPC id collision is now observable**: when an agent re-uses a
   JSON-RPC id while the previous request with that id is still in
   flight, the proxy used to silently overwrite the in-flight `Pending`

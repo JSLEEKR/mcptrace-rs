@@ -30,7 +30,6 @@ anyhow = "1.0"
 thiserror = "1.0"
 tokio = { version = "1.38", features = ["rt-multi-thread", "macros", "io-util", "process", "sync", "time", "io-std"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
-time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
 comfy-table = "7.1"
 hex = "0.4"
 
