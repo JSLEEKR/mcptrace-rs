@@ -1,8 +1,8 @@
-//! Crate-wide error type. Library code never panics — it returns [`Error`].
+//! Crate-wide error type. Library code never panics — it returns [`enum@Error`].
 
 use thiserror::Error;
 
-/// Result alias using the crate's [`Error`].
+/// Result alias using the crate's [`enum@Error`].
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// All fallible operations in mcptrace return one of these variants.

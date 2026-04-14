@@ -58,7 +58,7 @@ impl SpanStore for NullStore {
 
 /// Append-only JSONL store.
 ///
-/// Each call to [`record`] serializes the span to a line and writes it
+/// Each call to [`SpanStore::record`] serializes the span to a line and writes it
 /// with a single `write_all` (which on POSIX `O_APPEND` is atomic for
 /// writes ≤ PIPE_BUF; our frame cap of 1 MB is larger, so we serialize
 /// the writes via a Mutex for cross-platform safety).
