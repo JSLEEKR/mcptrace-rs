@@ -21,10 +21,21 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(out)
 }
 
-/// Compute a digest for tool-call arguments. Accepts a raw byte slice of
-/// the JSON `params.arguments` field as it appeared on the wire. We do
-/// **not** re-serialize — hashing the canonical wire bytes means digests
-/// are stable across mcptrace versions regardless of serde internals.
+/// Compute a digest for tool-call arguments.
+///
+/// Callers pass the bytes of the `params.arguments` field. The proxy
+/// path obtains these via [`crate::jsonrpc::Frame::arguments_canonical`],
+/// which re-serializes the parsed sub-value through `serde_json` — so
+/// the bytes are *canonical* (sorted keys, no extraneous whitespace),
+/// not the original wire bytes. That means semantically-equivalent
+/// argument objects with different on-the-wire formatting (whitespace,
+/// key order) collapse to the same digest, which is what operators
+/// want for repeat-call deduplication.
+///
+/// Stability across mcptrace versions is therefore tied to serde_json's
+/// canonical form (currently: BTreeMap-ordered keys, no whitespace),
+/// not to byte-exact wire input. Direct callers passing raw bytes
+/// (tests, custom integrations) get a digest of those exact bytes.
 #[must_use]
 pub fn arg_digest(raw: &[u8]) -> String {
     sha256_hex(raw)
