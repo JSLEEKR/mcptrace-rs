@@ -4,7 +4,7 @@
 [![for-the-badge](https://img.shields.io/badge/language-rust-red?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![for-the-badge](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 [![for-the-badge](https://img.shields.io/badge/unsafe-forbidden-brightgreen?style=for-the-badge)](#security)
-[![for-the-badge](https://img.shields.io/badge/tests-194-success?style=for-the-badge)](#tests)
+[![for-the-badge](https://img.shields.io/badge/tests-197-success?style=for-the-badge)](#tests)
 
 > **Transparent observability proxy and OpenTelemetry exporter for MCP
 > (Model Context Protocol) servers. Trace every tool call. Measure
@@ -249,19 +249,29 @@ burn_rate_threshold = 1.0
 
 ### Burn rate math
 
-We follow the Google SRE workbook ("Alerting on SLOs"):
+mcptrace supports three metric flavors, each with a slightly different
+burn-rate interpretation. In every case the convention is "higher
+burn = worse, alert fires when `burn_rate >= burn_rate_threshold`".
 
 ```
-# Error-rate flavor
+# error_rate   — target is the MAX allowed error rate (e.g. 0.01 = "1% max")
+actual_error_rate  = errors / total       over the window
+burn_rate          = actual_error_rate / target
+# (target == 0 ⇒ zero tolerance ⇒ any error alerts)
+
+# availability — target is the MIN required uptime (e.g. 0.995). SRE workbook form.
 error_budget       = 1 - target
-actual_error_rate  = errors / total           over the window
-burn_rate          = actual_error_rate / error_budget
-alert if burn_rate >= burn_rate_threshold
+actual_error_rate  = 1 - actual_availability
+burn_rate          = actual_error_rate / error_budget      if avail < target, else 0
+
+# latency_p95_ms — target is the MAX acceptable p95 latency in ms.
+burn_rate          = observed_p95_ms / target
 ```
 
-For latency SLOs we adapt: `budget = target`, `actual = p95`,
-`burn_rate = actual / target`. This lets ops phrase both error and
-latency SLOs in the same threshold language.
+Latency and error_rate share the same "budget is the target" framing so
+ops can phrase both in the same threshold language; availability follows
+the classic SRE formulation because it's how most operators already
+think about uptime SLOs.
 
 ### Running a check
 
@@ -337,7 +347,7 @@ cargo test
 ```
 
 This runs:
-- **182 unit tests** across the 11 library modules (digest, duration,
+- **185 unit tests** across the 11 library modules (digest, duration,
   trace-id, span, jsonrpc, store, exporter, slo, stats, proxy, cli)
 - **12 integration tests** in `tests/integration.rs` that exercise
   end-to-end workflows (store → read → stats → SLO → replay).

@@ -39,8 +39,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Cross-platform**: Windows + Linux + macOS; LF-only output
   regardless of host platform; `rustls-tls` (no native TLS) so the
   binary is portable and single-file.
-- **194 tests**: 182 unit + 12 integration, all deterministic and
+- **197 tests**: 185 unit + 12 integration, all deterministic and
   hermetic (no network, no child process spawning in CI).
+
+### Fixed
+
+- **SLO `error_rate` burn math**: in the pre-release, `error_rate`
+  targets were interpreted via the SRE-workbook availability formula
+  (`budget = 1 - target`), which produces absurd results when `target`
+  is phrased as "maximum allowed error rate" (the README's own
+  example). The corrected model treats `target` as the budget directly
+  for `error_rate`, so `target = 0.01` with a 33% observed error rate
+  now produces `burn_rate = 33.3` (fires the alert) instead of
+  `burn_rate = 0.34` (silent). `target = 0` is correctly treated as
+  zero-tolerance. `availability` math is unchanged (still SRE-workbook
+  form). Regression tests cover both flavors plus zero-tolerance and
+  empty-window edge cases.
 
 ### Deferred (to v1.1)
 

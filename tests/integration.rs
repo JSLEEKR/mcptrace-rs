@@ -90,7 +90,7 @@ fn full_workflow_slo_check_from_jsonl() {
 [[slo]]
 name = "errs"
 metric = "error_rate"
-target = 0.9
+target = 0.05
 window = "10s"
 burn_rate_threshold = 2.0
 "#;

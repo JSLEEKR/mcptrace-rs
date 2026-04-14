@@ -13,18 +13,27 @@
 //!
 //! # Burn-rate math
 //!
-//! From the Google SRE workbook, "Alerting on SLOs":
+//! We support three metric framings, each with a different burn-rate
+//! interpretation. The common thread is that `target` is always phrased
+//! so that "lower is worse" translates to "higher burn":
 //!
-//! ```text
-//! error_budget      = 1 - target          (for error_rate)
-//! actual_error_rate = errors / total      (over the window)
-//! burn_rate         = actual_error_rate / error_budget
-//! alert if burn_rate >= burn_rate_threshold
-//! ```
+//! - `error_rate`: `target` is the **maximum allowed error rate** (e.g.
+//!   `0.01` = "at most 1% of calls may error"). The budget IS the target
+//!   — `burn_rate = actual_error_rate / target`. An actual rate at the
+//!   target fires `burn_rate == 1.0`; twice the target fires `2.0`; etc.
 //!
-//! For latency SLOs we adapt: the "budget" is the target latency and the
-//! "actual" is the measured p95. This lets operators phrase both error
-//! and latency SLOs in the same alerting model.
+//! - `availability`: `target` is the **minimum required uptime** (e.g.
+//!   `0.995` = "at least 99.5% of calls must succeed"). Here we follow
+//!   the Google SRE workbook: `error_budget = 1 - target`,
+//!   `burn_rate = actual_error_rate / error_budget`, where
+//!   `actual_error_rate = 1 - actual_availability`. If actual availability
+//!   meets or beats target, burn is 0.
+//!
+//! - `latency_p95_ms`: `target` is the **maximum acceptable p95 latency**
+//!   in milliseconds. Budget IS the target;
+//!   `burn_rate = observed_p95_ms / target`.
+//!
+//! In every case, `burning` is true iff `burn_rate >= burn_rate_threshold`.
 //!
 //! # Rolling window
 //!
@@ -260,15 +269,22 @@ pub fn evaluate(slo: &Slo, spans: &[Span], now_nanos: u128) -> SloReport {
             let total = relevant.len() as f64;
             let errors = relevant.iter().filter(|s| !s.status.is_ok()).count() as f64;
             let actual = if total == 0.0 { 0.0 } else { errors / total };
-            let budget = (1.0 - slo.target).max(1e-12);
-            (actual, actual / budget)
+            // For the error_rate metric, `target` is the MAX allowed error
+            // rate — the budget IS the target. Burn == actual / target.
+            // If target == 0 (zero tolerance), any error fires an "infinite"
+            // burn, which in practice means we compare against a tiny
+            // epsilon so a single error blows past any reasonable threshold.
+            let budget = slo.target.max(1e-12);
+            let burn = if total == 0.0 { 0.0 } else { actual / budget };
+            (actual, burn)
         }
         SloMetric::Availability => {
             let total = relevant.len() as f64;
             let ok = relevant.iter().filter(|s| s.status.is_ok()).count() as f64;
             let avail = if total == 0.0 { 1.0 } else { ok / total };
             // "burn" interpreted as how far below target we are.
-            // If avail >= target, burn_rate = 0. Otherwise (target-avail)/(1-target).
+            // If avail >= target, burn_rate = 0. Otherwise
+            // (target-avail)/(1-target) following Google SRE workbook.
             let burn = if avail >= slo.target {
                 0.0
             } else {
@@ -530,11 +546,12 @@ burn_rate_threshold = 2.0
 
     #[test]
     fn evaluate_error_rate_burning() {
-        // target=0.9, budget=0.1, 50 err/100, actual=0.5, burn=5 -> burning.
+        // target=0.05 (max 5% errors allowed), 50 err/100 -> actual=0.5,
+        // burn = 0.5 / 0.05 = 10.0 -> burning.
         let slo2 = Slo {
             name: "errs".into(),
             metric: SloMetric::ErrorRate,
-            target: 0.9,
+            target: 0.05,
             window_nanos: 10_000_000_000,
             burn_rate_threshold: 2.0,
             tool_glob: "*".into(),
@@ -552,6 +569,67 @@ burn_rate_threshold = 2.0
             "expected burning at burn_rate {} (actual={}, samples={})",
             r.burn_rate, r.actual, r.sample_count
         );
+        assert!((r.burn_rate - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn evaluate_error_rate_within_budget_new_math() {
+        // target=0.10 (10% errors allowed), 1 err / 10 -> actual=0.10,
+        // burn = 0.10 / 0.10 = 1.0 -> NOT burning at threshold 2.0.
+        let slo = Slo {
+            name: "errs".into(),
+            metric: SloMetric::ErrorRate,
+            target: 0.10,
+            window_nanos: 10_000_000_000,
+            burn_rate_threshold: 2.0,
+            tool_glob: "*".into(),
+        };
+        let base: u128 = 5_000_000_000;
+        let mut v: Vec<Span> = (0..9)
+            .map(|i| mk(5, SpanStatus::Ok, "t", base + i as u128))
+            .collect();
+        v.push(mk(5, SpanStatus::Error, "t", base + 9));
+        let r = evaluate(&slo, &v, base + 1_000);
+        assert!(!r.burning);
+        assert!((r.burn_rate - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn evaluate_error_rate_zero_tolerance() {
+        // target=0.0 (zero tolerance): any error must fire.
+        let slo = Slo {
+            name: "errs".into(),
+            metric: SloMetric::ErrorRate,
+            target: 0.0,
+            window_nanos: 10_000_000_000,
+            burn_rate_threshold: 2.0,
+            tool_glob: "*".into(),
+        };
+        let base: u128 = 5_000_000_000;
+        let mut v: Vec<Span> = (0..99)
+            .map(|i| mk(5, SpanStatus::Ok, "t", base + i as u128))
+            .collect();
+        v.push(mk(5, SpanStatus::Error, "t", base + 100));
+        let r = evaluate(&slo, &v, base + 1_000);
+        // 1/100 errors -> actual 0.01, budget ~ 1e-12 -> astronomical burn.
+        assert!(r.burning);
+    }
+
+    #[test]
+    fn evaluate_error_rate_empty_window_not_burning() {
+        // Empty window must not fire even with zero-tolerance target.
+        let slo = Slo {
+            name: "errs".into(),
+            metric: SloMetric::ErrorRate,
+            target: 0.0,
+            window_nanos: 10_000_000_000,
+            burn_rate_threshold: 2.0,
+            tool_glob: "*".into(),
+        };
+        let r = evaluate(&slo, &[], 1_000);
+        assert!(!r.burning);
+        assert_eq!(r.sample_count, 0);
+        assert_eq!(r.burn_rate, 0.0);
     }
 
     #[test]
