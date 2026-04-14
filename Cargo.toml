@@ -1,0 +1,44 @@
+[package]
+name = "mcptrace"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.75"
+authors = ["JSLEEKR <93jslee@gmail.com>"]
+description = "Observability proxy and OpenTelemetry exporter for MCP servers — trace tool calls, measure latencies, enforce SLO budgets"
+license = "MIT"
+repository = "https://github.com/JSLEEKR/mcptrace-rs"
+homepage = "https://github.com/JSLEEKR/mcptrace-rs"
+readme = "README.md"
+keywords = ["mcp", "observability", "tracing", "otlp", "slo"]
+categories = ["command-line-utilities", "development-tools::profiling"]
+
+[lib]
+name = "mcptrace"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mcptrace"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+sha2 = "0.10"
+anyhow = "1.0"
+thiserror = "1.0"
+tokio = { version = "1.38", features = ["rt-multi-thread", "macros", "io-util", "process", "sync", "time", "io-std"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
+time = { version = "0.3", features = ["formatting", "parsing", "serde"] }
+comfy-table = "7.1"
+hex = "0.4"
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+opt-level = 3
