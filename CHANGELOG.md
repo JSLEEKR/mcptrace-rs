@@ -39,11 +39,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Cross-platform**: Windows + Linux + macOS; LF-only output
   regardless of host platform; `rustls-tls` (no native TLS) so the
   binary is portable and single-file.
-- **197 tests**: 185 unit + 12 integration, all deterministic and
+- **199 tests**: 187 unit + 12 integration, all deterministic and
   hermetic (no network, no child process spawning in CI).
 
 ### Fixed
 
+- **JSON-RPC id collision is now observable**: when an agent re-uses a
+  JSON-RPC id while the previous request with that id is still in
+  flight, the proxy used to silently overwrite the in-flight `Pending`
+  entry. The first request never finalized into a span and never
+  bumped any counter, so a misbehaving agent could silently drop
+  observations. Added a new `spans_dropped_id_collision` counter to
+  `ProxyMetrics` (also surfaced in the proxy shutdown summary line),
+  bumped on every overwrite. Regression test
+  `pending_insert_collision_is_observable` exercises the path. The
+  forwarding behavior is unchanged — id reuse is still a JSON-RPC
+  protocol violation per the spec, and operators can now see when it
+  happens.
 - **SLO `error_rate` burn math**: in the pre-release, `error_rate`
   targets were interpreted via the SRE-workbook availability formula
   (`budget = 1 - target`), which produces absurd results when `target`

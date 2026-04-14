@@ -91,6 +91,12 @@ pub struct ProxyMetrics {
     pub frames_too_large: AtomicU64,
     pub parse_errors: AtomicU64,
     pub orphan_spans: AtomicU64,
+    /// Incremented when the agent re-uses a JSON-RPC id while the
+    /// previous request with that id is still in flight. The previous
+    /// pending entry is overwritten (per JSON-RPC spec, id reuse before
+    /// a response is an agent bug); this counter surfaces the silent drop
+    /// so operators can detect a misbehaving agent.
+    pub spans_dropped_id_collision: AtomicU64,
 }
 
 /// Finalize a [`Pending`] into a [`Span`] given the response frame.
@@ -299,7 +305,12 @@ where
                     if frame.is_request() && !frame.is_notification() {
                         let pend = pending_from_request(&frame);
                         let key = id_key(&pend.request_id);
-                        a2c_pending.lock().await.insert(key, pend);
+                        let prev = a2c_pending.lock().await.insert(key, pend);
+                        if prev.is_some() {
+                            a2c_metrics
+                                .spans_dropped_id_collision
+                                .fetch_add(1, Ordering::Relaxed);
+                        }
                     }
                     if write_frame(&mut child_stdin, bytes).await.is_err() {
                         break;
@@ -411,6 +422,9 @@ where
         frames_too_large: AtomicU64::new(metrics.frames_too_large.load(Ordering::Relaxed)),
         parse_errors: AtomicU64::new(metrics.parse_errors.load(Ordering::Relaxed)),
         orphan_spans: AtomicU64::new(metrics.orphan_spans.load(Ordering::Relaxed)),
+        spans_dropped_id_collision: AtomicU64::new(
+            metrics.spans_dropped_id_collision.load(Ordering::Relaxed),
+        ),
     };
     Ok(out)
 }
@@ -540,6 +554,52 @@ mod tests {
         observe(&s, &store, &[], &metrics);
         assert_eq!(metrics.spans_emitted.load(Ordering::Relaxed), 1);
         assert_eq!(metrics.orphan_spans.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn pending_insert_collision_is_observable() {
+        // Regression: when an agent re-uses a JSON-RPC id while the
+        // previous request is still in flight, the proxy must surface
+        // the silent overwrite via spans_dropped_id_collision so
+        // operators can detect it. Before the fix, the second insert
+        // silently dropped the first Pending without any counter bump.
+        let metrics = ProxyMetrics::default();
+        let mut map: HashMap<String, Pending> = HashMap::new();
+
+        let req_raw = br#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"a"}}"#;
+        let req2_raw = br#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"b"}}"#;
+        let f1 = Frame::parse_with_limit(req_raw, 1024).unwrap();
+        let f2 = Frame::parse_with_limit(req2_raw, 1024).unwrap();
+        let p1 = pending_from_request(&f1);
+        let p2 = pending_from_request(&f2);
+        let key1 = id_key(&p1.request_id);
+        let key2 = id_key(&p2.request_id);
+        assert_eq!(key1, key2, "test precondition: ids collide");
+
+        // First insert: no collision.
+        let prev = map.insert(key1.clone(), p1);
+        if prev.is_some() {
+            metrics
+                .spans_dropped_id_collision
+                .fetch_add(1, Ordering::Relaxed);
+        }
+        assert_eq!(metrics.spans_dropped_id_collision.load(Ordering::Relaxed), 0);
+
+        // Second insert with same key: collision counter must bump.
+        let prev = map.insert(key2, p2);
+        if prev.is_some() {
+            metrics
+                .spans_dropped_id_collision
+                .fetch_add(1, Ordering::Relaxed);
+        }
+        assert_eq!(metrics.spans_dropped_id_collision.load(Ordering::Relaxed), 1);
+        assert_eq!(map.len(), 1, "the collided entry overwrites in place");
+    }
+
+    #[test]
+    fn proxy_metrics_default_includes_id_collision() {
+        let m = ProxyMetrics::default();
+        assert_eq!(m.spans_dropped_id_collision.load(Ordering::Relaxed), 0);
     }
 
     #[test]

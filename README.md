@@ -4,7 +4,7 @@
 [![for-the-badge](https://img.shields.io/badge/language-rust-red?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![for-the-badge](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
 [![for-the-badge](https://img.shields.io/badge/unsafe-forbidden-brightgreen?style=for-the-badge)](#security)
-[![for-the-badge](https://img.shields.io/badge/tests-197-success?style=for-the-badge)](#tests)
+[![for-the-badge](https://img.shields.io/badge/tests-199-success?style=for-the-badge)](#tests)
 
 > **Transparent observability proxy and OpenTelemetry exporter for MCP
 > (Model Context Protocol) servers. Trace every tool call. Measure
@@ -347,7 +347,7 @@ cargo test
 ```
 
 This runs:
-- **185 unit tests** across the 11 library modules (digest, duration,
+- **187 unit tests** across the 11 library modules (digest, duration,
   trace-id, span, jsonrpc, store, exporter, slo, stats, proxy, cli)
 - **12 integration tests** in `tests/integration.rs` that exercise
   end-to-end workflows (store → read → stats → SLO → replay).

@@ -97,9 +97,10 @@ fn run_proxy_stdio(args: StdioArgs) -> Result<()> {
         .block_on(run_stdio_proxy(cfg, stdin, stdout, store, exporters))
         .context("proxy loop")?;
     eprintln!(
-        "mcptrace: spans_emitted={} dropped_buffer_full={} frames_too_large={} parse_errors={} orphans={}",
+        "mcptrace: spans_emitted={} dropped_buffer_full={} dropped_id_collision={} frames_too_large={} parse_errors={} orphans={}",
         metrics.spans_emitted.load(Ordering::Relaxed),
         metrics.spans_dropped_buffer_full.load(Ordering::Relaxed),
+        metrics.spans_dropped_id_collision.load(Ordering::Relaxed),
         metrics.frames_too_large.load(Ordering::Relaxed),
         metrics.parse_errors.load(Ordering::Relaxed),
         metrics.orphan_spans.load(Ordering::Relaxed),
