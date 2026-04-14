@@ -5,7 +5,7 @@
 - **Language:** Rust 2021 (edition), rustc 1.75+
 - **Date:** 2026-04-14
 - **Type:** New build (V1 Round — second V1 Rust project after benchdiff-rs)
-- **Test count:** 194 (182 unit + 12 integration), all passing in debug and release
+- **Test count:** 199 (187 unit + 12 integration), all passing in debug and release
 - **Release build:** `cargo build --release` clean, LTO thin, strip, opt-level 3
 - **Warnings:** zero (`#![deny(warnings)]` in both lib and bin)
 - **Unsafe:** forbidden (`#![forbid(unsafe_code)]`)
@@ -60,7 +60,6 @@ Minimal, pinned to minor versions:
 - anyhow 1 + thiserror 1
 - tokio 1.38 (rt-multi-thread, io-util, process, sync, time, io-std)
 - reqwest 0.12 (rustls-tls, blocking, json; no native-tls)
-- time 0.3
 - comfy-table 7.1
 - hex 0.4
 
