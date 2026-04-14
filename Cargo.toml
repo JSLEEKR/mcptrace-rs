@@ -11,6 +11,7 @@ homepage = "https://github.com/JSLEEKR/mcptrace-rs"
 readme = "README.md"
 keywords = ["mcp", "observability", "tracing", "otlp", "slo"]
 categories = ["command-line-utilities", "development-tools::profiling"]
+exclude = [".eval-notes-*.md", ".harness/", "ROUND_LOG.md"]
 
 [lib]
 name = "mcptrace"
